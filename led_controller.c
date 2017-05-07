@@ -58,6 +58,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define CAPS_LOCK_LED_ADDRESS 0x5B
 #endif
 
+#if !defined(GAME_LOCK_LED_ADDRESS)
+#define GAME_LOCK_LED_ADDRESS 0x9A
+#endif
+
 /* Which LED should breathe during sleep */
 #if !defined(BREATHE_LED_ADDRESS)
 #define BREATHE_LED_ADDRESS CAPS_LOCK_LED_ADDRESS
@@ -80,10 +84,122 @@ uint8_t rx[1] __attribute__((aligned(2)));
 // buffer for sending the whole page at once (used also as a temp buffer)
 uint8_t full_page[0xB4+1] = {0};
 
+// global LED brightness
+uint8_t led_brightness = 0xFF;
+
+// caps lock flag
+bool caps_on;
+bool led_br_toggle;
+bool game_lock_toggle;
+
 // LED mask (which LEDs are present, selected by bits)
 const uint8_t is31_wf_leds_mask[0x12] = {
   0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF,
   0x00, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0x00, 0x7F, 0x00
+};
+
+uint8_t led_modes[4][83] = {
+  { /* LED All Mode */
+    0x24,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0x34,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0x44,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0x54,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0x64,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0x74,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0x84,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0x94,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xA4,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+  },
+  { /* LED Extra Mode */
+    0x24,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0x34,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00,
+    0x44,
+    0x00, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0x54,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0x00,
+    0x64,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x74,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x84,
+    0x00, 0x00, 0xFF, 0x00, 0x00, 0x00, 0xFF, 0x00,
+    0x94,
+    0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF,
+    0xA4,
+    0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF,
+  },
+  { /* LED Game Mode */
+    0x24,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x34,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x44,
+    0x00, 0x00, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x54,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0x00,
+    0x64,
+    0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x74,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x84,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x94,
+    0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0x00,
+    0xA4,
+    0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0x00,
+  },
+  { /* LED Mouse Mode*/
+    0x24,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x34,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x44,
+    0x00, 0x00, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x54,
+    0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x64,
+    0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0xFF, 0xFF,
+    0x74,
+    0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x84,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF,
+    0x94,
+    0x00, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00, 0x00,
+    0xA4,
+    0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0x00,
+  },
+};
+
+uint8_t led_mode_off[83] = {
+  0x24,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x34,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x44,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x54,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x64,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x74,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x84,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x94,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0xA4,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
 
 /* ============================
@@ -157,6 +273,8 @@ static THD_FUNCTION(LEDthread, arg) {
   uint8_t temp;
   uint8_t save_page, save_breath1, save_breath2;
   msg_t msg, retval;
+  uint8_t i;
+  uint8_t new_brightness;
 
   while(true) {
     // wait for a message (asynchronous)
@@ -168,15 +286,19 @@ static THD_FUNCTION(LEDthread, arg) {
     switch(msg) {
       case LED_MSG_CAPS_ON:
         // turn caps on on pages 1 and 2
+      caps_on = true;
         is31_write_register(0, CAPS_LOCK_LED_ADDRESS, 0xFF);
         is31_write_register(1, CAPS_LOCK_LED_ADDRESS, 0xFF);
         is31_write_register(2, CAPS_LOCK_LED_ADDRESS, 0xFF);
+        is31_write_register(3, CAPS_LOCK_LED_ADDRESS, 0xFF);
         break;
       case LED_MSG_CAPS_OFF:
         // turn caps off on pages 1 and 2
+      caps_on = false;
         is31_write_register(0, CAPS_LOCK_LED_ADDRESS, 0);
         is31_write_register(1, CAPS_LOCK_LED_ADDRESS, 0);
         is31_write_register(2, CAPS_LOCK_LED_ADDRESS, 0);
+        is31_write_register(3, CAPS_LOCK_LED_ADDRESS, 0);
         break;
       case LED_MSG_SLEEP_LED_ON:
         // save current settings
@@ -207,81 +329,122 @@ static THD_FUNCTION(LEDthread, arg) {
       case LED_MSG_SLEEP_LED_OFF:
         // should not get here; wakeup should be received in the branch above
         break;
-      case LED_MSG_ALL_TOGGLE:
-        // read current page into 'temp'
+      case LED_MSG_BRIGHT_INC:
         is31_read_register(IS31_FUNCTIONREG, IS31_REG_PICTDISP, &temp);
-        chThdSleepMilliseconds(1);
-        // switch to 'the other' page
-        if(temp==2) {
-          is31_write_register(IS31_FUNCTIONREG, IS31_REG_PICTDISP, 0);
+        // chThdSleepMilliseconds(1);
+
+        new_brightness = (led_brightness + 15 > 255 ? 255 : led_brightness + 15);
+
+        for (i = 0; i < 81; i++) {
+          if (i == 35) {
+            led_modes[temp][i] = (caps_on ? 0xFF : 0);
+            continue;
+          }
+          if (i % 9 != 0 && led_modes[temp][i] > 0) {
+            led_modes[temp][i] = new_brightness;
+          }
+        }
+        for (i = 0; i < 9; i++) {
+          is31_write_data(temp,(uint8_t *)(led_modes[temp]+(9*i)),9);
+          // chThdSleepMilliseconds(5);
+        }
+
+        led_brightness = new_brightness;
+
+        break;
+      case LED_MSG_BRIGHT_DEC:
+        is31_read_register(IS31_FUNCTIONREG, IS31_REG_PICTDISP, &temp);
+        // chThdSleepMilliseconds(1);
+
+        new_brightness = (led_brightness - 15 <= 0 ? 1 : led_brightness - 15);
+
+        for (i = 0; i < 81; i++) {
+          if (i == 35) {
+            led_modes[temp][i] = (caps_on ? 0xFF : 0);
+            continue;
+          }
+          if (i % 9 != 0 && led_modes[temp][i] > 0) {
+            led_modes[temp][i] = new_brightness;
+          }
+        }
+        for (i = 0; i < 9; i++) {
+          is31_write_data(temp,(uint8_t *)(led_modes[temp]+(9*i)),9);
+          // chThdSleepMilliseconds(5);
+        }
+
+        led_brightness = new_brightness;
+
+        break;
+      case LED_MSG_BRIGHT_TOGGLE:
+        led_br_toggle = (led_br_toggle ? false : true);
+        is31_read_register(IS31_FUNCTIONREG, IS31_REG_PICTDISP, &temp);
+        // chThdSleepM2illiseconds(1);
+        if (led_br_toggle) {
+          led_modes[temp][35] = (caps_on ? 0xFF : 0);
+          for (i = 0; i < 9; i++) {
+            is31_write_data(temp,(uint8_t *)(led_modes[temp]+(9*i)),9);
+            // chThdSleepMilliseconds(5);
+          }
+          if (temp == 1 || temp == 2) {
+            // force leds that won't light from matrix
+            is31_write_register(temp, 0x79, 0xFF); // key right of enter
+          }
         } else {
-          is31_write_register(IS31_FUNCTIONREG, IS31_REG_PICTDISP, 2);
+          led_mode_off[35] = (caps_on ? 0xFF : 0);
+          for (i = 0; i < 9; i++) {
+            is31_write_data(temp,(uint8_t *)(led_mode_off+(9*i)),9);
+            // chThdSleepMilliseconds(5);
+          }
         }
         break;
-      case LED_MSG_GAME_TOGGLE:
-        // read current page into 'temp'
+      case LED_MSG_ALL_TOGGLE:
         is31_read_register(IS31_FUNCTIONREG, IS31_REG_PICTDISP, &temp);
         chThdSleepMilliseconds(1);
-        // switch to 'the other' page
-        if(temp==1) {
+        if (temp != 0)
           is31_write_register(IS31_FUNCTIONREG, IS31_REG_PICTDISP, 0);
-        } else {
+        break;
+      case LED_MSG_EXTRA_TOGGLE:
+        is31_read_register(IS31_FUNCTIONREG, IS31_REG_PICTDISP, &temp);
+        chThdSleepMilliseconds(1);
+        if (temp != 1)
           is31_write_register(IS31_FUNCTIONREG, IS31_REG_PICTDISP, 1);
-        }
+        // force leds that won't light from matrix
+        is31_write_register(1, 0x79, 0xFF); // key right of enter
+        // is31_write_registe(2, 0x24, 0x00); // ESC
+        // is31_write_registe(2, 0x34, 0xFF); // 8 (lights with ESC)
+        break;
+      case LED_MSG_GAME_TOGGLE:
+        is31_read_register(IS31_FUNCTIONREG, IS31_REG_PICTDISP, &temp);
+        chThdSleepMilliseconds(1);
+        if (temp != 2)
+          is31_write_register(IS31_FUNCTIONREG, IS31_REG_PICTDISP, 2);
+        // force leds that won't light from matrix
+        is31_write_register(2, 0x79, 0xFF); // key right of enter
+        break;
+      case LED_MSG_MOUSE_TOGGLE:
+        is31_read_register(IS31_FUNCTIONREG, IS31_REG_PICTDISP, &temp);
+        chThdSleepMilliseconds(1);
+        if (temp != 3)
+          is31_write_register(IS31_FUNCTIONREG, IS31_REG_PICTDISP, 3);
+        break;
+      case LED_MSG_GAME_LOCK_ON:
+        game_lock_toggle = true;
+        is31_write_register(2, GAME_LOCK_LED_ADDRESS, 0xFF);
+        break;
+      case LED_MSG_GAME_LOCK_OFF:
+        game_lock_toggle = false;
+        is31_write_register(2, GAME_LOCK_LED_ADDRESS, 0);
         break;
     }
   }
 }
-
-/* LED game mode */
-const uint8_t led_game[83] = {
-  0x24,
-  0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x34,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x44,
-  0x00, 0x00, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x54,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x64,
-  0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x74,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x84,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x94,
-  0x00, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00, 0x00,
-  0xA4,
-  0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0x00,
-};
-
-/* ALL LEDs */
-const uint8_t led_all[83] = {
-  0x24,
-  0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0,
-  0x34,
-  0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0,
-  0x44,
-  0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0,
-  0x54,
-  0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0,
-  0x64,
-  0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0,
-  0x74,
-  0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0,
-  0x84,
-  0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0,
-  0x94,
-  0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0,
-  0xA4,
-  0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0, 0xF0,
-};
 
 /* =============
  * hook into TMK
  * ============= */
 void hook_early_init(void) {
   uint8_t i;
+  uint8_t j;
 
   /* initialise I2C */
   /* I2C pins */
@@ -308,20 +471,29 @@ void hook_early_init(void) {
 
   /* enable breathing when the displayed page changes */
   // Fade-in Fade-out, time = 26ms * 2^N, N=3
-  is31_write_register(IS31_FUNCTIONREG, IS31_REG_BREATHCTRL1, (3<<4)|3);
+  is31_write_register(IS31_FUNCTIONREG, IS31_REG_BREATHCTRL1, (3<<4)|1);
   is31_write_register(IS31_FUNCTIONREG, IS31_REG_BREATHCTRL2, IS31_REG_BREATHCTRL2_ENABLE|3);
 
+  /* enable audio sync*/
+  // is31_write_register(IS31_FUNCTIONREG, IS31_REG_AUDIOSYNC, IS31_REG_AUDIOSYNC_ENABLE);
+
   /* Write pages */
-  for(i=0; i<9; i++) {
-    is31_write_data(1,(uint8_t *)(led_game+(9*i)),9);
-    chThdSleepMilliseconds(5);
-    is31_write_data(2,(uint8_t *)(led_all+(9*i)),9);
-    chThdSleepMilliseconds(5);
+  for (i = 0; i < 9; i++) {
+    for (j = 0; j < 4; j++) {
+      is31_write_data(j,(uint8_t *)(led_modes[j]+(9*i)),9);
+      chThdSleepMilliseconds(5);
+    }
   }
 
   // clean up the capslock LED
+  is31_write_register(0, CAPS_LOCK_LED_ADDRESS, 0);
   is31_write_register(1, CAPS_LOCK_LED_ADDRESS, 0);
   is31_write_register(2, CAPS_LOCK_LED_ADDRESS, 0);
+  is31_write_register(3, CAPS_LOCK_LED_ADDRESS, 0);
+  caps_on = false;
+
+  // led on by default
+  led_br_toggle = true;
 
   /* more time consuming LED processing should be offloaded into
    * a thread, with asynchronous messaging. */

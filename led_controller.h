@@ -54,6 +54,7 @@ msg_t is31_read_register(uint8_t page, uint8_t reg, uint8_t *result);
 
 #define IS31_REG_AUDIOSYNC 0x06
 #define IS31_REG_AUDIOSYNC_ENABLE 0x1
+#define IS31_REG_AUDIOSYNC_DISABLE 0x00
 
 #define IS31_REG_FRAMESTATE 0x07
 
@@ -82,12 +83,27 @@ msg_t is31_read_register(uint8_t page, uint8_t reg, uint8_t *result);
 
 extern mailbox_t led_mailbox;
 
+// led matrix indices
+#define LED_ALL 0
+#define LED_EXTRA 1
+#define LED_GAME 2
+#define LED_MOUSE 3
+
 // constants for signaling the LED controller thread
 #define LED_MSG_CAPS_ON  1
 #define LED_MSG_CAPS_OFF 2
 #define LED_MSG_SLEEP_LED_ON 3
 #define LED_MSG_SLEEP_LED_OFF 4
-#define LED_MSG_ALL_TOGGLE 5
-#define LED_MSG_GAME_TOGGLE 6
+#define LED_MSG_BRIGHT_INC 5
+#define LED_MSG_BRIGHT_DEC 6
+#define LED_MSG_BRIGHT_TOGGLE 7
+#define LED_MSG_FADE_INC 8
+#define LED_MSG_FADE_DEC 9
+#define LED_MSG_ALL_TOGGLE 10
+#define LED_MSG_EXTRA_TOGGLE 11
+#define LED_MSG_GAME_TOGGLE 12
+#define LED_MSG_MOUSE_TOGGLE 13
+#define LED_MSG_GAME_LOCK_ON 14
+#define LED_MSG_GAME_LOCK_OFF 15
 
 #endif /* _LED_CONTROLLER_H_ */

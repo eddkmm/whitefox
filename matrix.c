@@ -7,6 +7,8 @@
 #include "print.h"
 #include "debug.h"
 #include "matrix.h"
+#include "led_controller.h"
+#include "keymap_common.h"
 
 
 /*
@@ -22,7 +24,6 @@ static matrix_row_t matrix[MATRIX_ROWS];
 static matrix_row_t matrix_debouncing[MATRIX_ROWS];
 static bool debouncing = false;
 static uint16_t debouncing_time = 0;
-
 
 void matrix_init(void)
 {
@@ -102,6 +103,20 @@ uint8_t matrix_scan(void)
             matrix[row] = matrix_debouncing[row];
         }
         debouncing = false;
+    }
+
+    // repeat br increase/decrease if key held
+    if (br_inc_held) {
+        if (timer_elapsed(br_inc_time) > 200) {
+            br_inc_time = timer_read();
+            chMBPost(&led_mailbox, LED_MSG_BRIGHT_INC, TIME_IMMEDIATE);
+        }
+    }
+    if (br_dec_held) {
+        if (timer_elapsed(br_dec_time) > 200) {
+            br_dec_time = timer_read();
+            chMBPost(&led_mailbox, LED_MSG_BRIGHT_DEC, TIME_IMMEDIATE);
+        }
     }
     return 1;
 }
